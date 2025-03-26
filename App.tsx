@@ -1,131 +1,236 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import 'react-native-gesture-handler';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { OMDB_KEY } from '@env';
 import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
+  FlatList,
   Text,
-  useColorScheme,
+  TextInput,
   View,
+  Image,
+  SafeAreaView,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert
 } from 'react-native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { NavigationContainer } from '@react-navigation/native';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+function HomeScreen({ navigation }: { navigation: any }) {
+  const [query, setQuery] = useState("");
+  const [input, setInputValue] = useState('');
+  const [results, setResults] = useState<any>([]);
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  const handleChange = (text: string) => {
+    setInputValue(text);
+    setQuery(text);
   };
 
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the reccomendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
+  useEffect(() => {
+    if (!query) return;
+
+    const fetchMovies = async () => {
+      try {
+        const url = `https://www.omdbapi.com/?apikey=${OMDB_KEY}&s=${query}`;
+        console.log(url);
+        const res = await axios.get(url);
+
+        if (res.data.Response === "True") {
+          setResults(res.data.Search || []);
+        } else {
+          setResults([]);
+        }
+      } catch (error: any) {
+        console.log("❌ API Error:", error.message || error);
+      }
+    };
+
+    fetchMovies();
+  }, [query]);
 
   return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
+    <SafeAreaView style={styles.container}>
+      <TextInput 
+        value={input} 
+        onChangeText={handleChange} 
+        placeholder="Search for a movie..." 
+        style={styles.searchInput}
       />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
-        </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
+
+      {results.length > 0 ? (
+        <FlatList
+          data={results}
+          keyExtractor={(movie) => movie.imdbID}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={styles.movieCard} 
+              onPress={() => navigation.navigate('MovieDetails', { movie: item })}
+            >
+              <Image source={{ uri: item.Poster }} style={styles.poster} />
+              <View style={styles.movieDetails}>
+                <Text style={styles.movieTitle}>{item.Title}</Text>
+                <Text style={styles.movieYear}>{item.Year}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      ) : query ? (
+        <Text style={styles.noResults}>No results found.</Text>
+      ) : null}
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
+function MovieDetailsScreen({ route }: { route: any }) {
+  const { movie } = route.params;
+  const [details, setDetails] = useState<any>(movie);
 
-export default App;
+  useEffect(() => {
+    const fetchMovieDetails = async () => {
+      try {
+        const url = `https://www.omdbapi.com/?apikey=${OMDB_KEY}&i=${movie.imdbID}&plot=full`;
+        const res = await axios.get(url);
+        
+        if (res.data.Response === "True") {
+          setDetails(res.data);
+        }
+      } catch (error) {
+        console.log("❌ Movie Details API Error:", error);
+      }
+    };
+
+    fetchMovieDetails();
+  }, [movie.imdbID]);
+
+  // Save movie to AsyncStorage
+  const saveToFavorites = async () => {
+    try {
+      const storedFavorites = await AsyncStorage.getItem('favorites');
+      const favorites = storedFavorites ? JSON.parse(storedFavorites) : [];
+      
+      // Check if movie is already in favorites
+      if (favorites.some((fav: any) => fav.imdbID === details.imdbID)) {
+        Alert.alert("Already Saved", "This movie is already in your favorites.");
+        return;
+      }
+
+      favorites.push(details);
+      await AsyncStorage.setItem('favorites', JSON.stringify(favorites));
+      Alert.alert("Saved!", "Movie added to favorites.");
+    } catch (error) {
+      console.log("❌ Error saving movie:", error);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.detailsContainer}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Image source={{ uri: details.Poster }} style={styles.detailsPoster} />
+        <Text style={styles.detailsTitle}>{details.Title}</Text>
+        <Text style={styles.detailsYear}>Year: {details.Year}</Text>
+        <Text style={styles.detailsType}>Type: {details.Type}</Text>
+        <Text style={styles.detailsIMDB}>IMDB ID: {details.imdbID}</Text>
+        <Text style={styles.detailsPlot}>{details.Plot || "Plot not available"}</Text>
+
+        <TouchableOpacity style={styles.saveButton} onPress={saveToFavorites}>
+          <Text style={styles.saveButtonText}>Save to Favorites</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// Favorites Screen
+function FavoritesScreen({ navigation }: { navigation: any }) {
+  const [favorites, setFavorites] = useState<any>([]);
+
+  useEffect(() => {
+    const fetchFavorites = async () => {
+      try {
+        const storedFavorites = await AsyncStorage.getItem('favorites');
+        const favoritesList = storedFavorites ? JSON.parse(storedFavorites) : [];
+        setFavorites(favoritesList);
+      } catch (error) {
+        console.log("❌ Error fetching favorites:", error);
+      }
+    };
+
+    fetchFavorites();
+  }, []);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.sectionTitle}>Your Favorite Movies</Text>
+      {favorites.length > 0 ? (
+        <FlatList
+          data={favorites}
+          keyExtractor={(movie) => movie.imdbID}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={styles.movieCard} 
+              onPress={() => navigation.navigate('MovieDetails', { movie: item })}
+            >
+              <Image source={{ uri: item.Poster }} style={styles.poster} />
+              <View style={styles.movieDetails}>
+                <Text style={styles.movieTitle}>{item.Title}</Text>
+                <Text style={styles.movieYear}>{item.Year}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      ) : (
+        <Text style={styles.noResults}>No favorites yet.</Text>
+      )}
+    </SafeAreaView>
+  );
+}
+
+function TabNavigator() {
+  return (
+    <Tab.Navigator>
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Favorites" component={FavoritesScreen} />
+    </Tab.Navigator>
+  );
+}
+
+// Main App Stack
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Main" component={TabNavigator} options={{ headerShown: false }} />
+        <Stack.Screen name="MovieDetails" component={MovieDetailsScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+// 📌 Styles
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 10 },
+  searchInput: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 8 },
+  movieCard: { flexDirection: 'row', padding: 10, marginVertical: 6, borderRadius: 10, alignItems: 'center' },
+  poster: { width: 80, height: 120, borderRadius: 5, marginRight: 10 },
+  noResults: { textAlign: 'center', fontSize: 18, color: '#888', marginTop: 20 },
+  scrollContainer: { alignItems: "center",flex: 1, padding: 20, backgroundColor: 'white' },
+  movieDetails: { flex: 1 },
+  movieTitle: { fontSize: 16, fontWeight: 'bold' },
+  movieYear: { fontSize: 14, color: '#666' },
+  detailsContainer: { flex: 1, alignItems: 'center', padding: 20 },
+  detailsPoster: { width: 200, height: 300, borderRadius: 10, marginTop: 20 },
+  detailsTitle: { fontSize: 22, fontWeight: 'bold', marginTop: 10 },
+  saveButton: { backgroundColor: '#007BFF', padding: 10, borderRadius: 8, marginTop: 10 },
+  saveButtonText: { color: 'white', fontSize: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center',marginTop: 10 },
+  detailsYear: { fontSize: 18, color: '#444', marginTop: 5 },
+  detailsType: { fontSize: 16, color: '#666', marginTop: 5 },
+  detailsIMDB: { fontSize: 16, color: '#888', marginTop: 5 },
+  detailsPlot: { fontSize: 16, color: '#222', marginTop: 10, maxWidth: '95%',textAlign:"justify" },
+});
